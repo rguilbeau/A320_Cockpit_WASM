@@ -1,0 +1,15 @@
+{
+  "dependencies": [],
+  "content_type": "MISC",
+  "title": "A320_Cockpit",
+  "manufacturer": "",
+  "creator": "Romain Guilbeay",
+  "package_version": "0.1.0",
+  "minimum_game_version": "1.27.21.0",
+  "release_notes": {
+    "neutral": {
+      "LastUpdate": "",
+      "OlderHistory": ""
+    }
+  }
+}
