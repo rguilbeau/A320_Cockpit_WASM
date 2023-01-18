@@ -233,7 +233,8 @@ void init_client_data_area(const char* name, SIMCONNECT_CLIENT_DATA_ID data_id, 
 }
 
 /// <summary>
-/// Initialisation du module WASM
+/// Initialisation du module WASM, connexion à sim connect, création des clients data area et mise
+/// en écoute des requêtes client
 /// </summary>
 /// <param name=""></param>
 /// <returns></returns>
@@ -249,11 +250,26 @@ extern "C" MSFS_CALLBACK void module_init(void)
 }
 
 /// <summary>
-/// Déinitialisation du module WASM
+/// Déinitialisation du module WASM, déconnexion à sim connect
 /// </summary>
 /// <param name=""></param>
 /// <returns></returns>
 extern "C" MSFS_CALLBACK void module_deinit(void)
 {
-	fprintf(stderr, "%s: De-initialization completed\n", MODULE_NAME);
+	fprintf(stderr, "%s: De-initializing", MODULE_NAME);
+
+	if (!simConnect)
+	{
+		fprintf(stderr, "%s: SimConnect handle was not valid.\n", MODULE_NAME);
+		return;
+	}
+
+	HRESULT hr = SimConnect_Close(simConnect);
+	if (hr != S_OK)
+	{
+		fprintf(stderr, "%s: SimConnect_Close failed.\n", MODULE_NAME);
+		return;
+	}
+
+	fprintf(stderr, "%s: De-initialization completed", MODULE_NAME);
 }
