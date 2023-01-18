@@ -73,9 +73,6 @@ struct Result {
 /// </summary>
 HANDLE simConnect;
 
-
-
-
 /// <summary>
 /// Mise en écoute des requetes du client
 /// </summary>
@@ -104,28 +101,6 @@ bool listen_client_requests(SIMCONNECT_CLIENT_DATA_ID data_id, RequestID request
 }
 
 /// <summary>
-/// Lecture du LVar
-/// </summary>
-/// <param name="varname"></param>
-/// <returns></returns>
-FLOAT64 read_lvar(PCSTRINGZ varname)
-{
-	FLOAT64 value = 0;
-	ID id_var = check_named_variable(varname);
-
-	if (id_var == -1)
-	{
-		fprintf(stderr, "%s: Variable \"%s\" not found", MODULE_NAME, varname);
-	}
-	else
-	{
-		value = get_named_variable_value(id_var);
-	}
-
-	return value;
-}
-
-/// <summary>
 /// Envoi un message au client
 /// </summary>
 /// <param name="data_id"></param>
@@ -142,7 +117,7 @@ bool send_to_client(SIMCONNECT_CLIENT_DATA_ID data_id, SIMCONNECT_CLIENT_DATA_DE
 		SIMCONNECT_CLIENT_DATA_SET_FLAG_DEFAULT,
 		0,
 		size,
-		&data_set
+		data_set
 	);
 
 	if (result != S_OK)
@@ -152,6 +127,28 @@ bool send_to_client(SIMCONNECT_CLIENT_DATA_ID data_id, SIMCONNECT_CLIENT_DATA_DE
 	}
 
 	return true;
+}
+
+/// <summary>
+/// Lecture du LVar
+/// </summary>
+/// <param name="varname"></param>
+/// <returns></returns>
+void read_lvar(PCSTRINGZ varname)
+{
+	ID id_var = check_named_variable(varname);
+
+	if (id_var == -1)
+	{
+		fprintf(stderr, "%s: Variable \"%s\" not found", MODULE_NAME, varname);
+		// todo send error to client
+	}
+	else
+	{
+		Result response;
+		response.value = get_named_variable_value(id_var);
+		send_to_client(DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(response), &response);
+	}
 }
 
 /// <summary>
@@ -169,9 +166,7 @@ void CALLBACK on_request_received(SIMCONNECT_RECV* pData, DWORD cbData, void* pC
 
 		if (recv_data->dwRequestID == RequestID::READ_LVAR)
 		{
-			Result exeRes;
-			exeRes.value = read_lvar((char*)&recv_data->dwData);
-			send_to_client(DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(exeRes), &exeRes);
+			read_lvar((char*)&recv_data->dwData);
 		}
 	}
 }
@@ -215,31 +210,26 @@ bool init_simconnect()
 /// <param name="data_id"></param>
 /// <param name="definition"></param>
 /// <returns></returns>
-bool init_client_data_area(const char* name, SIMCONNECT_CLIENT_DATA_ID data_id, SIMCONNECT_CLIENT_DATA_DEFINITION_ID definition, DWORD size)
+void init_client_data_area(const char* name, SIMCONNECT_CLIENT_DATA_ID data_id, SIMCONNECT_CLIENT_DATA_DEFINITION_ID definition, DWORD size)
 {
 	HRESULT result;
 
 	result = SimConnect_MapClientDataNameToID(simConnect, name, data_id);
 	if (result != S_OK) {
 		fprintf(stderr, "%s: SimConnect_MapClientDataNameToID failed (%s:%u)\n", MODULE_NAME, name, data_id);
-		return false;
 	}
 
 	// Création des clients data pour l'envoi de commande
 	result = SimConnect_CreateClientData(simConnect, data_id, size, SIMCONNECT_CREATE_CLIENT_DATA_FLAG_DEFAULT);
 	if (result != S_OK) {
 		fprintf(stderr, "%s: SimConnect_CreateClientData failed (%s:%u)\n", MODULE_NAME, name, data_id);
-		return false;
 	}
 
 	// Ajout des clients data
 	result = SimConnect_AddToClientDataDefinition(simConnect, definition, 0, size);
 	if (result != S_OK) {
 		fprintf(stderr, "%s: SimConnect_AddToClientDataDefinition failed (%s:%u)\n", MODULE_NAME, name, data_id);
-		return false;
 	}
-
-	return true;
 }
 
 /// <summary>
