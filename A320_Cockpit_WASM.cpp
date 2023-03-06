@@ -25,6 +25,10 @@ const char* DATA_NAME_READ_LVAR = "A320_Cockpit.READ_LVAR";
 /// Nom du data pour le retour de la valeur d'une LVAR 
 /// </summary>
 const char* DATA_NAME_LVAR_VALUE = "A320_Cockpit.LVAR_VALUE";
+/// <summary>
+/// Nom du data pour le retour d'erreur
+/// </summary>
+const char* DATA_NAME_ERROR = "A320_Cockpit.ERROR";
 
 /// <summary>
 /// ID du data pour la demande de lecture d'une LVar
@@ -34,6 +38,10 @@ const SIMCONNECT_CLIENT_DATA_ID DATA_ID_READ_LVAR = 0;
 /// ID du data pour la réponse de la valeur d'une LVar
 /// </summary>
 const SIMCONNECT_CLIENT_DATA_ID DATA_ID_VALUE_LVAR = 1;
+/// <summary>
+/// ID du data pour le retour d'erreur
+/// </summary>
+const SIMCONNECT_CLIENT_DATA_ID DATA_ID_ERROR = 2;
 
 /// <summary>
 /// ID de la définition de la lecture d'une LVar
@@ -43,6 +51,10 @@ const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_ID_READ_LVAR = 0;
 /// ID de la définition de la réponse de la valeur d'une LVar
 /// </summary>
 const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_VALUE_LVAR = 1;
+/// <summary>
+/// ID de la définition pour le retour d'erreur
+/// </summary>
+const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_ERROR = 2;
 
 /// <summary>
 /// Les requets ID
@@ -50,7 +62,8 @@ const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_VALUE_LVAR = 1;
 enum RequestID
 {
 	READ_LVAR,
-	VALUE_LVAR
+	VALUE_LVAR,
+	ERROR
 };
 
 /// <summary>
@@ -62,10 +75,26 @@ enum WASM_GROUP
 };
 
 /// <summary>
-/// La structure de la valeur de la réponse d'une LVar
+/// La structure de la valeur de la réponse d'une 
+/// LVar pour le retour vers le client
 /// </summary>
-struct Result {
+struct ResponseLvar {
 	FLOAT64 value;
+};
+
+/// <summary>
+/// La structure du code d'erreur 
+/// pour le retour vers le client
+/// </summary>
+struct ResponseError {
+	INT code_error;
+};
+
+/// <summary>
+/// Liste des erreurs retournés au client par le module WASM
+/// </summary>
+enum ErrorCode {
+	LVAR_NOT_FOUND = 1
 };
 
 /// <summary>
@@ -141,11 +170,13 @@ void read_lvar(PCSTRINGZ varname)
 	if (id_var == -1)
 	{
 		fprintf(stderr, "%s: Variable \"%s\" not found", MODULE_NAME, varname);
-		// todo send error to client
+		ResponseError response;
+		response.code_error = (INT)ErrorCode::LVAR_NOT_FOUND;
+		send_to_client(DATA_ID_ERROR, DEFINITION_ERROR, sizeof(response), &response);
 	}
 	else
 	{
-		Result response;
+		ResponseLvar response;
 		response.value = get_named_variable_value(id_var);
 		send_to_client(DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(response), &response);
 	}
@@ -242,7 +273,8 @@ extern "C" MSFS_CALLBACK void module_init(void)
 {
 	init_simconnect();
 	init_client_data_area(DATA_NAME_READ_LVAR, DATA_ID_READ_LVAR, DEFINITION_ID_READ_LVAR, SIMCONNECT_CLIENTDATA_MAX_SIZE);
-	init_client_data_area(DATA_NAME_LVAR_VALUE, DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(Result));
+	init_client_data_area(DATA_NAME_LVAR_VALUE, DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(ResponseLvar));
+	init_client_data_area(DATA_NAME_ERROR, DATA_ID_ERROR, DEFINITION_ERROR, sizeof(ResponseError));
 
 	// Ecoute des commandes du client
 	fprintf(stderr, "%s: Waiting client commands\n", MODULE_NAME);
