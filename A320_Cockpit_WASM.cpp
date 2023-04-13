@@ -21,6 +21,12 @@ const char* MODULE_NAME = "A320_Cockpit";
 /// Nom du data pour la demande de lecture d'une LVar
 /// </summary>
 const char* DATA_NAME_READ_LVAR = "A320_Cockpit.READ_LVAR";
+
+/// <summary>
+/// Nom du data pour l'envoi d'évenement
+/// </summary>
+const char* DATA_NAME_SEND_EVENT = "A320_Cockpit.SEND_EVENT";
+
 /// <summary>
 /// Nom du data pour le retour de la valeur d'une LVAR 
 /// </summary>
@@ -35,6 +41,10 @@ const char* DATA_NAME_ERROR = "A320_Cockpit.ERROR";
 /// </summary>
 const SIMCONNECT_CLIENT_DATA_ID DATA_ID_READ_LVAR = 0;
 /// <summary>
+/// ID du data pour l'envoi d'evenement
+/// </summary>
+const SIMCONNECT_CLIENT_DATA_ID DATA_ID_SEND_EVENT = 3;
+/// <summary>
 /// ID du data pour la réponse de la valeur d'une LVar
 /// </summary>
 const SIMCONNECT_CLIENT_DATA_ID DATA_ID_VALUE_LVAR = 1;
@@ -47,6 +57,10 @@ const SIMCONNECT_CLIENT_DATA_ID DATA_ID_ERROR = 2;
 /// ID de la définition de la lecture d'une LVar
 /// </summary>
 const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_ID_READ_LVAR = 0;
+/// <summary>
+/// ID de la définition de l'envoi d'evenement
+/// </summary>
+const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_ID_SEND_EVENT = 3;
 /// <summary>
 /// ID de la définition de la réponse de la valeur d'une LVar
 /// </summary>
@@ -63,7 +77,8 @@ enum RequestID
 {
 	READ_LVAR,
 	VALUE_LVAR,
-	ERROR
+	ERROR,
+	SEND_EVENT
 };
 
 /// <summary>
@@ -192,12 +207,16 @@ void CALLBACK on_request_received(SIMCONNECT_RECV* pData, DWORD cbData, void* pC
 {
 	if (pData->dwID == SIMCONNECT_RECV_ID_CLIENT_DATA)
 	{
-		
 		SIMCONNECT_RECV_CLIENT_DATA* recv_data = (SIMCONNECT_RECV_CLIENT_DATA*)pData;
 
 		if (recv_data->dwRequestID == RequestID::READ_LVAR)
 		{
 			read_lvar((char*)&recv_data->dwData);
+		}
+		else if (recv_data->dwRequestID == RequestID::SEND_EVENT)
+		{
+			fprintf(stderr, "%s: Event= %s", MODULE_NAME, (PCSTRINGZ)&recv_data->dwData);
+			execute_calculator_code((PCSTRINGZ)&recv_data->dwData, nullptr, nullptr, nullptr);
 		}
 	}
 }
@@ -275,10 +294,13 @@ extern "C" MSFS_CALLBACK void module_init(void)
 	init_client_data_area(DATA_NAME_READ_LVAR, DATA_ID_READ_LVAR, DEFINITION_ID_READ_LVAR, SIMCONNECT_CLIENTDATA_MAX_SIZE);
 	init_client_data_area(DATA_NAME_LVAR_VALUE, DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(ResponseLvar));
 	init_client_data_area(DATA_NAME_ERROR, DATA_ID_ERROR, DEFINITION_ERROR, sizeof(ResponseError));
+	init_client_data_area(DATA_NAME_SEND_EVENT, DATA_ID_SEND_EVENT, DEFINITION_ID_SEND_EVENT, SIMCONNECT_CLIENTDATA_MAX_SIZE);
 
 	// Ecoute des commandes du client
 	fprintf(stderr, "%s: Waiting client commands\n", MODULE_NAME);
+
 	listen_client_requests(DATA_ID_READ_LVAR, READ_LVAR, DEFINITION_ID_READ_LVAR);
+	listen_client_requests(DATA_ID_SEND_EVENT, SEND_EVENT, DEFINITION_ID_SEND_EVENT);
 }
 
 /// <summary>
