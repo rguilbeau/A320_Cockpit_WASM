@@ -18,104 +18,98 @@
 const char* MODULE_NAME = "A320_Cockpit";
 
 /// <summary>
-/// Nom du data pour la demande de lecture d'une LVar
+/// Client SimConnect
 /// </summary>
-const char* DATA_NAME_READ_LVAR = "A320_Cockpit.READ_LVAR";
+HANDLE simConnect;
 
 /// <summary>
-/// Nom du data pour l'envoi d'évenement
+/// Structure d'une LVAR souscrite
 /// </summary>
-const char* DATA_NAME_SEND_EVENT = "A320_Cockpit.SEND_EVENT";
-
-/// <summary>
-/// Nom du data pour le retour de la valeur d'une LVAR 
-/// </summary>
-const char* DATA_NAME_LVAR_VALUE = "A320_Cockpit.LVAR_VALUE";
-/// <summary>
-/// Nom du data pour le retour d'erreur
-/// </summary>
-const char* DATA_NAME_ERROR = "A320_Cockpit.ERROR";
-
-/// <summary>
-/// ID du data pour la demande de lecture d'une LVar
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_ID DATA_ID_READ_LVAR = 0;
-/// <summary>
-/// ID du data pour l'envoi d'evenement
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_ID DATA_ID_SEND_EVENT = 3;
-/// <summary>
-/// ID du data pour la réponse de la valeur d'une LVar
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_ID DATA_ID_VALUE_LVAR = 1;
-/// <summary>
-/// ID du data pour le retour d'erreur
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_ID DATA_ID_ERROR = 2;
-
-/// <summary>
-/// ID de la définition de la lecture d'une LVar
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_ID_READ_LVAR = 0;
-/// <summary>
-/// ID de la définition de l'envoi d'evenement
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_ID_SEND_EVENT = 3;
-/// <summary>
-/// ID de la définition de la réponse de la valeur d'une LVar
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_VALUE_LVAR = 1;
-/// <summary>
-/// ID de la définition pour le retour d'erreur
-/// </summary>
-const SIMCONNECT_CLIENT_DATA_DEFINITION_ID DEFINITION_ERROR = 2;
-
-/// <summary>
-/// Les requets ID
-/// </summary>
-enum RequestID
+struct SubscribeLvar
 {
-	READ_LVAR,
-	VALUE_LVAR,
-	ERROR,
-	SEND_EVENT
-};
-
-/// <summary>
-/// Le groupe WASM
-/// </summary>
-enum WASM_GROUP
-{
-	GROUP
-};
-
-/// <summary>
-/// La structure de la valeur de la réponse d'une 
-/// LVar pour le retour vers le client
-/// </summary>
-struct ResponseLvar {
+	ID id;
+	PCSTRINGZ name;
 	FLOAT64 value;
 };
 
 /// <summary>
-/// La structure du code d'erreur 
-/// pour le retour vers le client
+/// 
 /// </summary>
-struct ResponseError {
-	INT code_error;
+struct DataArea
+{
+	const char* name;
+	SIMCONNECT_CLIENT_DATA_ID data_id;
+	SIMCONNECT_CLIENT_DATA_DEFINITION_ID definition_id;
+	SIMCONNECT_DATA_REQUEST_ID request_id;
+	DWORD size;
 };
 
 /// <summary>
-/// Liste des erreurs retournés au client par le module WASM
+/// Cannal avec le programme externe pour la souscription d'une LVAR
 /// </summary>
-enum ErrorCode {
-	LVAR_NOT_FOUND = 1
+DataArea subscribe_lvar_area = {
+	"A320_Cockpit.SUBSCRIBE_LVAR",
+	(SIMCONNECT_CLIENT_DATA_ID)0,
+	(SIMCONNECT_CLIENT_DATA_DEFINITION_ID)0,
+	(SIMCONNECT_DATA_REQUEST_ID)0,
+	SIMCONNECT_CLIENTDATA_MAX_SIZE
 };
 
 /// <summary>
-/// Client SimConnect
+/// Cannal avec le programme externe pour la réponse lors d'un changement de valeur d'une LVAR
 /// </summary>
-HANDLE simConnect;
+DataArea response_lvar_area = {
+	"A320_Cockpit.RESPONSE_LVAR",
+	(SIMCONNECT_CLIENT_DATA_ID)1,
+	(SIMCONNECT_CLIENT_DATA_DEFINITION_ID)1,
+	(SIMCONNECT_DATA_REQUEST_ID)1,
+	sizeof(SubscribeLvar)
+};
+
+/// <summary>
+/// Cannal avec le programme externe pour la récéption d'event (execute_calculator_code) venant du programme externe
+/// </summary>
+DataArea send_event_area = {
+	"A320_Cockpit.SEND_EVENT",
+	(SIMCONNECT_CLIENT_DATA_ID)2,
+	(SIMCONNECT_CLIENT_DATA_DEFINITION_ID)2,
+	(SIMCONNECT_DATA_REQUEST_ID)2,
+	SIMCONNECT_CLIENTDATA_MAX_SIZE
+};
+
+/// <summary>
+/// Liste des LVAR souscrites
+/// </summary>
+std::vector<SubscribeLvar> subscribed_lvar;
+
+/// <summary>
+/// Create client data area
+/// </summary>
+/// <param name="name"></param>
+/// <param name="data_id"></param>
+/// <param name="definition"></param>
+/// <returns></returns>
+void init_client_data_area(DataArea dataAera)
+{
+	HRESULT result;
+
+	result = SimConnect_MapClientDataNameToID(simConnect, dataAera.name, dataAera.data_id);
+	if (result != S_OK) {
+		fprintf(stderr, "%s: SimConnect_MapClientDataNameToID failed (%s:%u)\n", MODULE_NAME, dataAera.name, dataAera.data_id);
+	}
+
+	// Création des clients data pour l'envoi de commande
+	result = SimConnect_CreateClientData(simConnect, dataAera.data_id, dataAera.size, SIMCONNECT_CREATE_CLIENT_DATA_FLAG_DEFAULT);
+	if (result != S_OK) {
+		fprintf(stderr, "%s: SimConnect_CreateClientData failed (%s:%u)\n", MODULE_NAME, dataAera.name, dataAera.data_id);
+	}
+
+	// Ajout des clients data
+	result = SimConnect_AddToClientDataDefinition(simConnect, dataAera.definition_id, 0, dataAera.size);
+	if (result != S_OK) {
+		fprintf(stderr, "%s: SimConnect_AddToClientDataDefinition failed (%s:%u)\n", MODULE_NAME, dataAera.name, dataAera.data_id);
+	}
+}
 
 /// <summary>
 /// Mise en écoute des requetes du client
@@ -123,21 +117,36 @@ HANDLE simConnect;
 /// <param name="data_id"></param>
 /// <param name="request_id"></param>
 /// <param name="definition"></param>
-bool listen_client_requests(SIMCONNECT_CLIENT_DATA_ID data_id, RequestID request_id, SIMCONNECT_CLIENT_DATA_DEFINITION_ID definition)
+bool listen_client_requests(DataArea dataArea)
 {
 	// Ecoute des commandes du client
-	fprintf(stderr, "%s: Listen client requests data_id:%u, request_id:%u, definition:%u\n", MODULE_NAME, data_id, request_id, definition);
+	fprintf(
+		stderr,
+		"%s: Listen client requests data_id:%u, request_id:%u, definition:%u\n",
+		MODULE_NAME,
+		dataArea.data_id,
+		dataArea.request_id,
+		dataArea.definition_id
+	);
+
 	HRESULT result = SimConnect_RequestClientData(simConnect,
-		data_id,
-		request_id,
-		definition,
+		dataArea.data_id,
+		dataArea.request_id,
+		dataArea.definition_id,
 		SIMCONNECT_CLIENT_DATA_PERIOD_ON_SET,
 		SIMCONNECT_CLIENT_DATA_REQUEST_FLAG_DEFAULT
 	);
 
 	if (result != S_OK)
 	{
-		fprintf(stderr, "%s: SimConnect_RequestClientData failed data_id:%u, request_id:%u, definition:%u\n", MODULE_NAME, data_id, request_id, definition);
+		fprintf(
+			stderr,
+			"%s: SimConnect_RequestClientData failed data_id:%u, request_id:%u, definition:%u\n",
+			MODULE_NAME,
+			dataArea.data_id,
+			dataArea.request_id,
+			dataArea.definition_id
+		);
 		return false;
 	}
 
@@ -152,15 +161,14 @@ bool listen_client_requests(SIMCONNECT_CLIENT_DATA_ID data_id, RequestID request
 /// <param name="size"></param>
 /// <param name="data_set"></param>
 /// <returns></returns>
-bool send_to_client(SIMCONNECT_CLIENT_DATA_ID data_id, SIMCONNECT_CLIENT_DATA_DEFINITION_ID definition, DWORD size, void* data_set)
+bool send_to_client(DataArea dataArea, void* data_set)
 {
-	HRESULT result = SimConnect_SetClientData(
-		simConnect,
-		data_id,
-		definition,
+	HRESULT result = SimConnect_SetClientData(simConnect,
+		dataArea.data_id,
+		dataArea.definition_id,
 		SIMCONNECT_CLIENT_DATA_SET_FLAG_DEFAULT,
 		0,
-		size,
+		dataArea.size,
 		data_set
 	);
 
@@ -174,46 +182,60 @@ bool send_to_client(SIMCONNECT_CLIENT_DATA_ID data_id, SIMCONNECT_CLIENT_DATA_DE
 }
 
 /// <summary>
-/// Lecture du LVar
-/// </summary>
-/// <param name="varname"></param>
-/// <returns></returns>
-void read_lvar(PCSTRINGZ varname)
-{
-	ID id_var = check_named_variable(varname);
-
-	if (id_var == -1)
-	{
-		fprintf(stderr, "%s: Variable \"%s\" not found", MODULE_NAME, varname);
-		ResponseError response;
-		response.code_error = (INT)ErrorCode::LVAR_NOT_FOUND;
-		send_to_client(DATA_ID_ERROR, DEFINITION_ERROR, sizeof(response), &response);
-	}
-	else
-	{
-		ResponseLvar response;
-		response.value = get_named_variable_value(id_var);
-		send_to_client(DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(response), &response);
-	}
-}
-
-/// <summary>
-/// Callback des récéptions des messages de SimConnect
+/// Callback des récéptions des event de SimConnect et du programme externe
 /// </summary>
 /// <param name="pData"></param>
 /// <param name="cbData"></param>
 /// <param name="pContext"></param>
 void CALLBACK on_request_received(SIMCONNECT_RECV* pData, DWORD cbData, void* pContext)
 {
-	if (pData->dwID == SIMCONNECT_RECV_ID_CLIENT_DATA)
+	if (pData->dwID == SIMCONNECT_RECV_ID_EVENT_FRAME) {
+		// A chaque frame, on lit les variables de l'avion
+		for (SubscribeLvar &lvar : subscribed_lvar)
+		{
+			bool force_send = false;
+
+			// Si la LVAR n'a pas d'ID, elle n'a jamais été lu
+			if (lvar.id == -1)
+			{
+				ID id_var = check_named_variable(lvar.name);
+				if (id_var == -1)
+				{
+					fprintf(stderr, "%s: %s not found", MODULE_NAME, lvar.name);
+					continue;
+				}
+				else 
+				{
+					force_send = true; // On force l'envoi pour la 1ere lecture
+					lvar.id = id_var;
+				}
+			}
+
+			// Lecture + envoi de la LVAR au programme externe
+			FLOAT64 value = get_named_variable_value(lvar.id);
+			if (force_send || lvar.value != value) {
+				lvar.value = value;
+				fprintf(stderr, "%s: %s: %f", MODULE_NAME, lvar.name, lvar.value);
+			}
+		}
+	} 
+	else if (pData->dwID == SIMCONNECT_RECV_ID_CLIENT_DATA)
 	{
 		SIMCONNECT_RECV_CLIENT_DATA* recv_data = (SIMCONNECT_RECV_CLIENT_DATA*)pData;
 
-		if (recv_data->dwRequestID == RequestID::READ_LVAR)
+		// Le programme externe veut sourscrire une LVAR
+		if (recv_data->dwRequestID == subscribe_lvar_area.request_id)
 		{
-			read_lvar((char*)&recv_data->dwData);
+			SubscribeLvar lvar = {
+				-1,
+				(char*)&recv_data->dwData,
+				0
+			};
+			subscribed_lvar.push_back(lvar);
 		}
-		else if (recv_data->dwRequestID == RequestID::SEND_EVENT)
+
+		// Le programme externe lance un event
+		else if (recv_data->dwRequestID == send_event_area.request_id)
 		{
 			fprintf(stderr, "%s: Event= %s", MODULE_NAME, (PCSTRINGZ)&recv_data->dwData);
 			execute_calculator_code((PCSTRINGZ)&recv_data->dwData, nullptr, nullptr, nullptr);
@@ -221,66 +243,6 @@ void CALLBACK on_request_received(SIMCONNECT_RECV* pData, DWORD cbData, void* pC
 	}
 }
 
-/// <summary>
-/// Initialisation et connexion à simconnect
-/// </summary>
-/// <returns></returns>
-bool init_simconnect()
-{
-	HRESULT result;
-
-	// Connexion à SimConnect
-	fprintf(stderr, "%s: Initialize module...\n", MODULE_NAME);
-
-	result = SimConnect_Open(&simConnect, MODULE_NAME, (HWND)NULL, 0, 0, 0);
-	if (result != S_OK) {
-		fprintf(stderr, "%s: SimConnect_Open failed\n", MODULE_NAME);
-		return false;
-	}
-
-	result = SimConnect_SetNotificationGroupPriority(simConnect, WASM_GROUP::GROUP, SIMCONNECT_GROUP_PRIORITY_HIGHEST);
-	if (result != S_OK) {
-		fprintf(stderr, "%s: SimConnect_SetNotificationGroupPriority failed.\n", MODULE_NAME);
-		return false;
-	}
-
-	result = SimConnect_CallDispatch(simConnect, on_request_received, NULL);
-	if (result != S_OK) {
-		fprintf(stderr, "%s: SimConnect_CallDispatch failed.\n", MODULE_NAME);
-		return false;
-	}
-
-	return true;
-}
-
-/// <summary>
-/// Create client data area
-/// </summary>
-/// <param name="name"></param>
-/// <param name="data_id"></param>
-/// <param name="definition"></param>
-/// <returns></returns>
-void init_client_data_area(const char* name, SIMCONNECT_CLIENT_DATA_ID data_id, SIMCONNECT_CLIENT_DATA_DEFINITION_ID definition, DWORD size)
-{
-	HRESULT result;
-
-	result = SimConnect_MapClientDataNameToID(simConnect, name, data_id);
-	if (result != S_OK) {
-		fprintf(stderr, "%s: SimConnect_MapClientDataNameToID failed (%s:%u)\n", MODULE_NAME, name, data_id);
-	}
-
-	// Création des clients data pour l'envoi de commande
-	result = SimConnect_CreateClientData(simConnect, data_id, size, SIMCONNECT_CREATE_CLIENT_DATA_FLAG_DEFAULT);
-	if (result != S_OK) {
-		fprintf(stderr, "%s: SimConnect_CreateClientData failed (%s:%u)\n", MODULE_NAME, name, data_id);
-	}
-
-	// Ajout des clients data
-	result = SimConnect_AddToClientDataDefinition(simConnect, definition, 0, size);
-	if (result != S_OK) {
-		fprintf(stderr, "%s: SimConnect_AddToClientDataDefinition failed (%s:%u)\n", MODULE_NAME, name, data_id);
-	}
-}
 
 /// <summary>
 /// Initialisation du module WASM, connexion à sim connect, création des clients data area et mise
@@ -290,17 +252,51 @@ void init_client_data_area(const char* name, SIMCONNECT_CLIENT_DATA_ID data_id, 
 /// <returns></returns>
 extern "C" MSFS_CALLBACK void module_init(void)
 {
-	init_simconnect();
-	init_client_data_area(DATA_NAME_READ_LVAR, DATA_ID_READ_LVAR, DEFINITION_ID_READ_LVAR, SIMCONNECT_CLIENTDATA_MAX_SIZE);
-	init_client_data_area(DATA_NAME_LVAR_VALUE, DATA_ID_VALUE_LVAR, DEFINITION_VALUE_LVAR, sizeof(ResponseLvar));
-	init_client_data_area(DATA_NAME_ERROR, DATA_ID_ERROR, DEFINITION_ERROR, sizeof(ResponseError));
-	init_client_data_area(DATA_NAME_SEND_EVENT, DATA_ID_SEND_EVENT, DEFINITION_ID_SEND_EVENT, SIMCONNECT_CLIENTDATA_MAX_SIZE);
+	HRESULT result;
 
-	// Ecoute des commandes du client
-	fprintf(stderr, "%s: Waiting client commands\n", MODULE_NAME);
+	// Connexion à SimConnect
+	fprintf(stderr, "%s: Initialize module...\n", MODULE_NAME);
 
-	listen_client_requests(DATA_ID_READ_LVAR, READ_LVAR, DEFINITION_ID_READ_LVAR);
-	listen_client_requests(DATA_ID_SEND_EVENT, SEND_EVENT, DEFINITION_ID_SEND_EVENT);
+	// DEBUG
+	SubscribeLvar lvar1 = {-1, "A32NX_AUTOPILOT_SPEED_SELECTED", 0};
+	subscribed_lvar.push_back(lvar1);
+
+	SubscribeLvar lvar2 = {-1, "A32NX_FCU_SPD_MANAGED_DOT", 0 };
+	subscribed_lvar.push_back(lvar2);
+
+	SubscribeLvar lvar3 = {-1, "A32NX_TRK_FPA_MODE_ACTIVE", 0 };
+	subscribed_lvar.push_back(lvar3);
+	// END DEBUG
+
+	result = SimConnect_Open(&simConnect, MODULE_NAME, (HWND)NULL, 0, 0, 0);
+	if (result != S_OK) {
+		fprintf(stderr, "%s: SimConnect_Open failed\n", MODULE_NAME);
+		return;
+	}
+
+	result = SimConnect_SetNotificationGroupPriority(simConnect, (SIMCONNECT_NOTIFICATION_GROUP_ID)0, SIMCONNECT_GROUP_PRIORITY_HIGHEST);
+	if (result != S_OK) {
+		fprintf(stderr, "%s: SimConnect_SetNotificationGroupPriority failed.\n", MODULE_NAME);
+		return;
+	}
+
+	result = SimConnect_CallDispatch(simConnect, on_request_received, NULL);
+	if (result != S_OK) {
+		fprintf(stderr, "%s: SimConnect_CallDispatch failed.\n", MODULE_NAME);
+		return;
+	}
+
+	// Initialisation des canneaux de communication avec le programme externe
+	init_client_data_area(subscribe_lvar_area);
+	init_client_data_area(response_lvar_area);
+	init_client_data_area(send_event_area);
+
+	// Ecoute des demandes venant du programme externe
+	listen_client_requests(subscribe_lvar_area);
+	listen_client_requests(send_event_area);
+
+	// Souscrition de l'event "on each frame" de MSFS pour lire toutes les variables de l'avion
+	SimConnect_SubscribeToSystemEvent(simConnect, (SIMCONNECT_CLIENT_EVENT_ID)10, "Frame");
 }
 
 /// <summary>
