@@ -23,14 +23,31 @@ const char* MODULE_NAME = "A320_Cockpit";
 HANDLE simConnect;
 
 /// <summary>
-/// Structure d'une LVAR souscrite
+/// Nombre de lecture max par loop
 /// </summary>
-struct SubscribeLvar
+const short MAX_READ_PER_LOOP = 10;
+
+/// <summary>
+/// Structure d'une LVAR
+/// </summary>
+struct Lvar
 {
-	ID id;
+	int external_id;
+	ID msfs_id;
 	PCSTRINGZ name;
 	FLOAT64 value;
 };
+
+/// <summary>
+/// Structure de la valeur d'une LVAR
+/// </summary>
+struct LvarValue
+{
+	int external_id;
+	int msfs_id;
+	FLOAT64 lvar_value;
+};
+
 
 /// <summary>
 /// 
@@ -63,7 +80,7 @@ DataArea response_lvar_area = {
 	(SIMCONNECT_CLIENT_DATA_ID)1,
 	(SIMCONNECT_CLIENT_DATA_DEFINITION_ID)1,
 	(SIMCONNECT_DATA_REQUEST_ID)1,
-	sizeof(SubscribeLvar)
+	sizeof(LvarValue)
 };
 
 /// <summary>
@@ -77,10 +94,12 @@ DataArea send_event_area = {
 	SIMCONNECT_CLIENTDATA_MAX_SIZE
 };
 
+short currentLvarRead = 0;
+
 /// <summary>
 /// Liste des LVAR souscrites
 /// </summary>
-std::vector<SubscribeLvar> subscribed_lvar;
+std::vector<Lvar> lvars;
 
 /// <summary>
 /// Create client data area
@@ -92,6 +111,8 @@ std::vector<SubscribeLvar> subscribed_lvar;
 void init_client_data_area(DataArea dataAera)
 {
 	HRESULT result;
+
+	fprintf(stderr, "%s: Init client data aera name=%s, id=%u, size=%u\n", MODULE_NAME, dataAera.name, dataAera.data_id, dataAera.size);
 
 	result = SimConnect_MapClientDataNameToID(simConnect, dataAera.name, dataAera.data_id);
 	if (result != S_OK) {
@@ -190,32 +211,41 @@ bool send_to_client(DataArea dataArea, void* data_set)
 void CALLBACK on_request_received(SIMCONNECT_RECV* pData, DWORD cbData, void* pContext)
 {
 	if (pData->dwID == SIMCONNECT_RECV_ID_EVENT_FRAME) {
-		// A chaque frame, on lit les variables de l'avion
-		for (SubscribeLvar &lvar : subscribed_lvar)
+		short lastReadIndex = currentLvarRead + MAX_READ_PER_LOOP;
+
+		for(; currentLvarRead < lastReadIndex; currentLvarRead++)
 		{
+			if (currentLvarRead >= lvars.size())
+			{
+				currentLvarRead = 0;
+				break;
+			}
+
+			Lvar *lvar = &lvars.at(currentLvarRead);
 			bool force_send = false;
 
 			// Si la LVAR n'a pas d'ID, elle n'a jamais été lu
-			if (lvar.id == -1)
+			if (lvar->msfs_id == -1)
 			{
-				ID id_var = check_named_variable(lvar.name);
+				ID id_var = check_named_variable(lvar->name);
 				if (id_var == -1)
 				{
-					fprintf(stderr, "%s: %s not found", MODULE_NAME, lvar.name);
 					continue;
 				}
 				else 
 				{
 					force_send = true; // On force l'envoi pour la 1ere lecture
-					lvar.id = id_var;
+					lvar->msfs_id = id_var;
 				}
 			}
 
 			// Lecture + envoi de la LVAR au programme externe
-			FLOAT64 value = get_named_variable_value(lvar.id);
-			if (force_send || lvar.value != value) {
-				lvar.value = value;
-				fprintf(stderr, "%s: %s: %f", MODULE_NAME, lvar.name, lvar.value);
+			FLOAT64 value = get_named_variable_value(lvar->msfs_id);
+			if (force_send || lvar->value != value) {
+				lvar->value = value;
+				
+				LvarValue responseValue = { lvar->external_id, lvar->msfs_id, lvar->value };
+				send_to_client(response_lvar_area, &responseValue);
 			}
 		}
 	} 
@@ -226,18 +256,40 @@ void CALLBACK on_request_received(SIMCONNECT_RECV* pData, DWORD cbData, void* pC
 		// Le programme externe veut sourscrire une LVAR
 		if (recv_data->dwRequestID == subscribe_lvar_area.request_id)
 		{
-			SubscribeLvar lvar = {
-				-1,
-				(char*)&recv_data->dwData,
-				0
-			};
-			subscribed_lvar.push_back(lvar);
+			// La LVAR est formatté de cette façcon "extarnal_id:nom_lvar"
+			PCSTRINGZ indexedLvar = (PCSTRINGZ)&recv_data->dwData;
+			
+			// Utilisez sscanf pour extraire l'entier et la chaîne de caractères
+			int external_id;
+			char parsed_name[256];
+			if (sscanf(indexedLvar, "%d:%s", &external_id, parsed_name) != 2) {
+				fprintf(stderr, "%s: Bad LVAR subscription format= %s", MODULE_NAME, indexedLvar);
+			}
+
+			PCSTRINGZ lvarName = (PCSTRINGZ)parsed_name;
+
+			// Recherche si la LVAR n'est pas déjà souscrite
+			for (Lvar &lvar : lvars)
+			{
+				if (strcmp(lvar.name, lvarName) == 0)
+				{
+					// La variable est déjà souscrite, on met à jour son ID
+					lvar.external_id = external_id;
+					lvar.msfs_id = -1; // Force la lecture
+					fprintf(stderr, "%s: Already subscribed, id updated= %s", MODULE_NAME, indexedLvar);
+					return;
+				}
+			}			
+			 
+			// Ajout dans la liste des LVAR souscrites
+			Lvar lvarToSubscribe = { external_id, -1, strdup(lvarName), 0 };
+			lvars.push_back(lvarToSubscribe);
+			fprintf(stderr, "%s: Subscribe= %s with id=%u", MODULE_NAME, lvarToSubscribe.name, lvarToSubscribe.external_id);
 		}
 
 		// Le programme externe lance un event
 		else if (recv_data->dwRequestID == send_event_area.request_id)
 		{
-			fprintf(stderr, "%s: Event= %s", MODULE_NAME, (PCSTRINGZ)&recv_data->dwData);
 			execute_calculator_code((PCSTRINGZ)&recv_data->dwData, nullptr, nullptr, nullptr);
 		}
 	}
@@ -256,17 +308,6 @@ extern "C" MSFS_CALLBACK void module_init(void)
 
 	// Connexion à SimConnect
 	fprintf(stderr, "%s: Initialize module...\n", MODULE_NAME);
-
-	// DEBUG
-	SubscribeLvar lvar1 = {-1, "A32NX_AUTOPILOT_SPEED_SELECTED", 0};
-	subscribed_lvar.push_back(lvar1);
-
-	SubscribeLvar lvar2 = {-1, "A32NX_FCU_SPD_MANAGED_DOT", 0 };
-	subscribed_lvar.push_back(lvar2);
-
-	SubscribeLvar lvar3 = {-1, "A32NX_TRK_FPA_MODE_ACTIVE", 0 };
-	subscribed_lvar.push_back(lvar3);
-	// END DEBUG
 
 	result = SimConnect_Open(&simConnect, MODULE_NAME, (HWND)NULL, 0, 0, 0);
 	if (result != S_OK) {
@@ -295,7 +336,7 @@ extern "C" MSFS_CALLBACK void module_init(void)
 	listen_client_requests(subscribe_lvar_area);
 	listen_client_requests(send_event_area);
 
-	// Souscrition de l'event "on each frame" de MSFS pour lire toutes les variables de l'avion
+	// Souscrition de l'event de MSFS pour lire toutes les variables de l'avion
 	SimConnect_SubscribeToSystemEvent(simConnect, (SIMCONNECT_CLIENT_EVENT_ID)10, "Frame");
 }
 
