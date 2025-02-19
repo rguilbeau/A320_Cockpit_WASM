@@ -2,9 +2,13 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="A320_Cockpit_WASM.cpp" />
+    <ClCompile Include="SimconnectClient.cpp" />
+    <ClCompile Include="Loop.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="A320_Cockpit_WASM.h" />
+    <ClInclude Include="SimconnectClient.h" />
+    <ClInclude Include="Loop.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

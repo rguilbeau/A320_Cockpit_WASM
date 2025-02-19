@@ -147,9 +147,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="A320_Cockpit_WASM.cpp" />
+    <ClCompile Include="Loop.cpp" />
+    <ClCompile Include="SimconnectClient.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="A320_Cockpit_WASM.h" />
+    <ClInclude Include="Loop.h" />
+    <ClInclude Include="SimconnectClient.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
