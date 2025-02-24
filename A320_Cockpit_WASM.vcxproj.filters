@@ -2,15 +2,40 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="A320_Cockpit_WASM.cpp" />
-    <ClCompile Include="SimconnectClient.cpp" />
-    <ClCompile Include="Loop.cpp" />
+    <ClCompile Include="sim_connect_wrapper.cpp">
+      <Filter>SimconnectWrapper</Filter>
+    </ClCompile>
+    <ClCompile Include="loop.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="A320_Cockpit_WASM.h" />
-    <ClInclude Include="SimconnectClient.h" />
-    <ClInclude Include="Loop.h" />
+    <ClInclude Include="sim_connect_wrapper.h">
+      <Filter>SimconnectWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="sim_connect_definition.h">
+      <Filter>SimconnectWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="sim_connect_event_handler.h">
+      <Filter>SimconnectWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="loop.h">
+      <Filter>Main</Filter>
+    </ClInclude>
+    <ClInclude Include="read_iterator.h">
+      <Filter>Main</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="SimconnectWrapper">
+      <UniqueIdentifier>{f9671953-0b65-432d-b8fa-b7d9d83d204b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Main">
+      <UniqueIdentifier>{973f4525-4a8c-4d48-b4a0-db9a35bff0e8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>

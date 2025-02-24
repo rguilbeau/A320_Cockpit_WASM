@@ -73,7 +73,7 @@
       </RuntimeTypeInfo>
       <SupportJustMyCode>
       </SupportJustMyCode>
-      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DebugInformationFormat>Program Database (/Zi)</DebugInformationFormat>
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
       <LanguageStandard>stdcpp14</LanguageStandard>
@@ -147,13 +147,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="A320_Cockpit_WASM.cpp" />
-    <ClCompile Include="Loop.cpp" />
-    <ClCompile Include="SimconnectClient.cpp" />
+    <ClCompile Include="loop.cpp" />
+    <ClCompile Include="sim_connect_wrapper.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="A320_Cockpit_WASM.h" />
-    <ClInclude Include="Loop.h" />
-    <ClInclude Include="SimconnectClient.h" />
+    <ClInclude Include="loop.h" />
+    <ClInclude Include="read_iterator.h" />
+    <ClInclude Include="sim_connect_definition.h" />
+    <ClInclude Include="sim_connect_event_handler.h" />
+    <ClInclude Include="sim_connect_wrapper.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
