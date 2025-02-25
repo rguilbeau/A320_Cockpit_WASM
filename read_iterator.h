@@ -153,8 +153,8 @@ public:
     {
         if (batch.size() > 0)
         {
-            m_bIsBatch = true;
             m_nBatchHint = 0;
+            m_bIsBatch = true;
             m_nBatchIndex = 0;
             m_batch = batch;
         }

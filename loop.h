@@ -23,11 +23,12 @@ private:
 
 	const char* m_sName;
 	SimConnectWrapper m_simConnect;
-	uint16_t nReadPerFrameLimit;
+	uint16_t m_nReadPerFrameLimit;
 
 	s_dataArea m_subscribeLvarArea;
 	s_dataArea m_bachLvarArea;
 	s_dataArea m_dataLvarArea;
+	s_dataArea m_eventArea;
 
 	std::vector<s_lvar> m_batchLvar;
 	std::vector<s_dataLvar> m_lvarsData;

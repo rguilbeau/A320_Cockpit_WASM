@@ -33,8 +33,17 @@ Loop::Loop(uint16_t nReadPerFrameLimit, uint16_t nBatchReadLimit, const char *sN
 	m_dataLvarArea.request_id = (SIMCONNECT_DATA_REQUEST_ID)2;
 	m_dataLvarArea.size = sizeof(s_dataLvar) * nReadPerFrameLimit;
 
+	// Création de l'éspace d'échange pour la reception des events
+	m_eventArea.name = "A320_Cockpit.EVENT";
+	m_eventArea.data_id = (SIMCONNECT_CLIENT_DATA_ID)3;
+	m_eventArea.definition_id = (SIMCONNECT_CLIENT_DATA_DEFINITION_ID)3;
+	m_eventArea.request_id = (SIMCONNECT_DATA_REQUEST_ID)3;
+	m_eventArea.size = sizeof(s_dataEvent);
+
 	// Ajout du handler (SimConnectEventHandler)
 	m_simConnect.setHandler(this);
+
+	m_nReadPerFrameLimit = nReadPerFrameLimit;
 }
 
 /// <summary>
@@ -49,10 +58,12 @@ void Loop::start()
 	m_simConnect.initDataArea(m_subscribeLvarArea);
 	m_simConnect.initDataArea(m_bachLvarArea);
 	m_simConnect.initDataArea(m_dataLvarArea);
+	m_simConnect.initDataArea(m_eventArea);
 
 	// Mise en écoute des éspace d'échange
 	m_simConnect.listen(m_subscribeLvarArea);
 	m_simConnect.listen(m_bachLvarArea);
+	m_simConnect.listen(m_eventArea);
 }
 
 /// <summary>
@@ -75,13 +86,13 @@ void Loop::onFrameEvent()
 	// Lecture de toutes les variables
 	for (s_lvar &lvar : m_readIterator)
 	{
-		if (lvar.msfsId == -1)
+		if (lvar.msfsId < 0)
 		{
 			// Cette Lvar n'a jamais été lue, on récupère son ID MSFS
 			lvar.msfsId = check_named_variable(lvar.name);
 		}
 
-		if (lvar.msfsId != -1)
+		if (lvar.msfsId > -1)
 		{
 			// Cette variable existe, on peut la lire
 			s_dataLvar data;
@@ -126,19 +137,28 @@ void Loop::onDataRecevied(SIMCONNECT_RECV_CLIENT_DATA* pData)
 		s_subsrcibeLvar* data = (s_subsrcibeLvar*)&pData->dwData;
 		
 		std::vector<s_lvar> batch;
-		for (int nIndex = 0; nIndex < nReadPerFrameLimit; nIndex++)
+		for (int nIndex = 0; nIndex < m_nReadPerFrameLimit; nIndex++)
 		{
-			s_lvar lvar;
-			lvar.msfsId = -1;
-			lvar.externalId = data[nIndex].externalId;
-			strcpy(lvar.name, data[nIndex].name);
+			if (data[nIndex].externalId >= 0)
+			{
+				s_lvar lvar;
+				lvar.msfsId = -1;
+				lvar.externalId = data[nIndex].externalId;
+				strcpy(lvar.name, data[nIndex].name);
 
-			batch.push_back(lvar);
-
-			fprintf(stdout, "%s: Batch lvar: \n", m_sName, lvar.name);
+				batch.push_back(lvar);
+			}
 		}
 
 		// Envoi du batch à l'itérateur de variable
 		m_readIterator.setBatch(batch);
+	}
+	else if (pData->dwRequestID == m_eventArea.request_id)
+	{
+		// Récupération de l'event
+		s_dataEvent* data = (s_dataEvent*)&pData->dwData;
+
+		// Execution de l'event
+		execute_calculator_code(data->sEvent, nullptr, nullptr, nullptr);
 	}
 }

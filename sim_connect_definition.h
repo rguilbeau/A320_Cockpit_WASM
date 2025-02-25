@@ -33,3 +33,11 @@ struct s_dataLvar
 	int externalId;
 	FLOAT64 value;
 };
+
+/// <summary>
+/// Structure de la donnée de l'éspace d'échange pour les events "A320_Cockpit.EVENT"
+/// </summary>
+struct s_dataEvent
+{
+	char sEvent[100];
+};
