@@ -147,6 +147,14 @@ public:
     }
 
     /// <summary>
+    /// Retourne la liste des variables
+    /// </summary>
+    std::vector<T> &getValues()
+    {
+        return m_lvars;
+    }
+
+    /// <summary>
     /// Ajout un batch de lecture (lecture prioritaire)
     /// </summary>
     void setBatch(const std::vector<T>& batch)

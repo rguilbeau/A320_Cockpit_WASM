@@ -126,6 +126,17 @@ void Loop::onDataRecevied(SIMCONNECT_RECV_CLIENT_DATA* pData)
 		lvar.externalId = data->externalId;
 		strcpy(lvar.name, data->name);
 
+		std::vector<s_lvar> lvars = m_readIterator.getValues();
+
+		for (s_lvar subscribedLvar : lvars)
+		{
+			if (lvar.name == subscribedLvar.name)
+			{
+				fprintf(stderr, "%s: Lvar already subscribed: %s\n", m_sName, lvar.name);
+				return;
+			}
+		}
+
 		// On l'ajoute à l'itérateur de variable
 		m_readIterator.push_back(lvar);
 
